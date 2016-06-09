@@ -1,0 +1,65 @@
+<modification>
+	<id>PageSpeed</id>
+	<version>2.0.x and above</version>
+	<vqmver>2.2.1</vqmver>
+	<author>v.alex.lg@gmail.com</author>
+	<file name="system/library/response.php">
+		<operation>
+			<search position="after"><![CDATA[if ($this->output) {]]></search>
+			<add><![CDATA[
+$out = preg_replace('#<!\-\-\[if IE\]>.+<!\[endif\]\-\->#Uis', '', $this->output);
+if (preg_match_all('#<script[^<]*>.*<\/script>#Uis', $out, $scripts)) {
+    $js = '';
+    $key = array();
+    $scripts_list = array();
+
+    foreach ($scripts[0] as $script) {
+        if (preg_match('#<script[^<]+src=("|\')*([^"\']+)("|\')*#', $script, $href)) {
+            if (strpos('//', $href[2]) === FALSE && file_exists(DIR_APPLICATION.'../'.$href[2])) {
+                $key[] = $href[2];
+            } else {
+                $scripts_list[] = $script;
+            }
+        } else {
+            $scripts_list[] = $script;
+        }
+    }
+
+    if (count($key) > 0) {
+        $file = md5(implode('-', $key));
+        $assets_dir = DIR_APPLICATION.'../assets';
+        $asset_file = $assets_dir.'/'.$file.'.js';
+        if (!file_exists($asset_file)) {
+            foreach ($key as $script) {
+                $data = file_get_contents(DIR_APPLICATION.'../'.$script);
+                $js .= preg_replace('#\/\*.+\*\/#Uis', '', $data.';');
+            }
+            if (!empty($js)) {
+                $fp = fopen($asset_file, 'w');
+                if ($fp) {
+                    fwrite($fp, trim($js));
+                    fclose($fp);
+                }
+            }
+        }
+
+        $scripts_list = array_merge(array('<script type="text/javascript" src="assets/'.$file.'.js"></script>'), $scripts_list);
+    }
+    if (strpos($this->output, '</body>') !== FALSE) {
+        $this->output = str_replace($scripts[0], '', $this->output);
+        $this->output = preg_replace('#<\/body>#', implode("\n", array_values($scripts_list)).'</body>', $this->output);
+    }
+}
+]]></add>
+        </operation>
+    </file>
+
+    <file name="catalog/controller/product/product.php">
+        <operation>
+            <search position="before"><![CDATA[$this->data['tags'] = array();]]></search>
+            <add><![CDATA[
+        $this->response->addHeader('Last-Modified: '.date('r', strtotime($result['date_modified'])));
+            ]]></add>
+        </operation>
+    </file>
+</modification>
