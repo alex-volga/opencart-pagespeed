@@ -1,6 +1,6 @@
 <modification>
 	<id>PageSpeed</id>
-	<version>2.0.x and above</version>
+	<version>1.5.x and above</version>
 	<vqmver>2.2.1</vqmver>
 	<author>v.alex.lg@gmail.com</author>
 	<file name="system/library/response.php">
@@ -8,6 +8,52 @@
 			<search position="after"><![CDATA[if ($this->output) {]]></search>
 			<add><![CDATA[
 $out = preg_replace('#<!\-\-\[if IE\]>.+<!\[endif\]\-\->#Uis', '', $this->output);
+
+$found = preg_match_all('#<link\s+(?:[^>]*?\s+)?href="?([^"]+)"?.+rel="?stylesheet.+#', $out, $css);
+if (!$found) {
+  $found = preg_match_all('#<link\s+(?:[^>]*?\s+)?rel=.+href="?([^"]+)"?[^>]+>#', $out, $css);
+}
+if ($found) {
+    $css_list = array();
+    $data = '';
+
+    $remove_css = array();
+    $move_css_code = array();
+    $list_files = array();
+    foreach ($css[1] as $i => $link) {
+      if (strpos($link, '/ie') === false) {
+        $remove_css[] = $css[0][$i];
+        if (strpos($link, '//') === false && strpos($link, 'font') === false) {
+          $list_files[] = $css[1][$i];
+        } else {
+          $move_css_code[] = $css[1][$i];
+        }
+      }
+    }
+    $file = md5(implode('-', $list_files));
+    $assets_dir = DIR_APPLICATION.'../assets';
+    $asset_file = $assets_dir.'/'.$file.'.css';
+    if (!file_exists($asset_file)) {
+      foreach ($list_files as $link) {
+        if (file_exists(DIR_APPLICATION.'../'.$link)) {
+          $css_file = file_get_contents(DIR_APPLICATION.'../'.$link);
+          $path = str_replace($_SERVER['DOCUMENT_ROOT'], '', pathinfo(DIR_APPLICATION.'../'.$link, PATHINFO_DIRNAME));
+          $css_file = str_replace(array('../image/', '../fonts/'), array('//'.$_SERVER['HTTP_HOST'].$path.'/../image/', '//'.$_SERVER['HTTP_HOST'].$path.'/../fonts/'), $css_file);
+          $data .= $css_file;
+        }
+      }
+      if (!empty($data)) {
+        file_put_contents($asset_file, trim($data));
+      }
+    }
+    $move_css_code[] = 'assets/'.$file.'.css';
+    if (strpos($this->output, '</body>') !== false) {
+        $this->output = str_replace($remove_css, '', $this->output);
+        $data = array_map(function($v) { return "@import url(\"{$v}\");\n"; }, $move_css_code);
+        $this->output = preg_replace('#<\/body>#', '<style type="text/css"> '.implode('', $data)."</style>\n</body>", $this->output);
+    }
+}
+
 if (preg_match_all('#<script[^<]*>.*<\/script>#Uis', $out, $scripts)) {
     $js = '';
     $key = array();
@@ -15,7 +61,7 @@ if (preg_match_all('#<script[^<]*>.*<\/script>#Uis', $out, $scripts)) {
 
     foreach ($scripts[0] as $script) {
         if (preg_match('#<script[^<]+src=("|\')*([^"\']+)("|\')*#', $script, $href)) {
-            if (strpos('//', $href[2]) === FALSE && file_exists(DIR_APPLICATION.'../'.$href[2])) {
+            if (strpos($href[2], '//') === false && file_exists(DIR_APPLICATION.'../'.$href[2])) {
                 $key[] = $href[2];
             } else {
                 $scripts_list[] = $script;
@@ -35,17 +81,13 @@ if (preg_match_all('#<script[^<]*>.*<\/script>#Uis', $out, $scripts)) {
                 $js .= preg_replace('#\/\*.+\*\/#Uis', '', $data.';');
             }
             if (!empty($js)) {
-                $fp = fopen($asset_file, 'w');
-                if ($fp) {
-                    fwrite($fp, trim($js));
-                    fclose($fp);
-                }
+                file_put_contents($asset_file, trim($js));
             }
         }
 
         $scripts_list = array_merge(array('<script type="text/javascript" src="assets/'.$file.'.js"></script>'), $scripts_list);
     }
-    if (strpos($this->output, '</body>') !== FALSE) {
+    if (strpos($this->output, '</body>') !== false) {
         $this->output = str_replace($scripts[0], '', $this->output);
         $this->output = preg_replace('#<\/body>#', implode("\n", array_values($scripts_list)).'</body>', $this->output);
     }
