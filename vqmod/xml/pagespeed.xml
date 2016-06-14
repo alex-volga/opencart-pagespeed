@@ -1,14 +1,15 @@
 <modification>
 	<id>PageSpeed</id>
-	<version>1.5.x and above</version>
+	<version>2.0.x and above</version>
 	<vqmver>2.2.1</vqmver>
 	<author>v.alex.lg@gmail.com</author>
 	<file name="system/library/response.php">
 		<operation>
 			<search position="after"><![CDATA[if ($this->output) {]]></search>
 			<add><![CDATA[
-$out = preg_replace('#<!\-\-\[if IE\]>.+<!\[endif\]\-\->#Uis', '', $this->output);
+if (strpos($_SERVER['REQUEST_URI'], '/admin/') === false) {
 
+$out = preg_replace('#<!\-\-\[if IE\]>.+<!\[endif\]\-\->#Uis', '', $this->output);
 $found = preg_match_all('#<link\s+(?:[^>]*?\s+)?href="?([^"]+)"?.+rel="?stylesheet.+#', $out, $css);
 if (!$found) {
   $found = preg_match_all('#<link\s+(?:[^>]*?\s+)?rel=.+href="?([^"]+)"?[^>]+>#', $out, $css);
@@ -91,6 +92,7 @@ if (preg_match_all('#<script[^<]*>.*<\/script>#Uis', $out, $scripts)) {
         $this->output = str_replace($scripts[0], '', $this->output);
         $this->output = preg_replace('#<\/body>#', implode("\n", array_values($scripts_list)).'</body>', $this->output);
     }
+}
 }
 ]]></add>
         </operation>
